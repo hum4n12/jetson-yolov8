@@ -2,28 +2,32 @@ from ultralytics import YOLO
 import cv2
 import rospy
 from geometry_msgs.msg import PoseWithCovarianceStamped
+from visualization_msgs.msg import Marker, MarkerArray
 from typing import List
 
 class Detection:
     def __init__(self) -> None:
-        self.model = YOLO("yolov8m.pt") #pretrained on COCO dataset
-        self.probability_threshold = 0.6
+        self.model = YOLO("yolov8m.pt") # pretrained on COCO dataset
+        self.probability_threshold = 0.8
         self.image = None
+        self.id = 1
 
     def get_image(self):
         return self.image
 
-    def create_pose(self) -> PoseWithCovarianceStamped:
-        initpose = PoseWithCovarianceStamped()
+    def create_pose(self) -> Marker:
+        initpose = Marker()
         initpose.header.stamp = rospy.get_rostime()
         initpose.header.frame_id = "ignore"
-        initpose.pose.pose.orientation.w = 0.0
-        initpose.pose.pose.orientation.x = 0.0
-        initpose.pose.pose.orientation.y = 0.0
-        initpose.pose.pose.orientation.z = 0.0
+        initpose.pose.orientation.w = 0.0
+        initpose.pose.orientation.x = 0.0
+        initpose.pose.orientation.y = 0.0
+        initpose.pose.orientation.z = 0.0
+        initpose.id = self.id
+        self.id += 1
         return initpose
 
-    def detect(self, image, depth) -> List[PoseWithCovarianceStamped]:
+    def detect(self, image, depth) -> MarkerArray:
         cv_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         results = self.model(cv_image)  # predict on an image
         positions = []
@@ -45,12 +49,44 @@ class Detection:
             center_x = (coords[2] - coords[0]) / 2 + coords[0]
             center_y = (coords[3] - coords[1]) / 2 + coords[1]
             pose.pose.pose.position.x = center_x
-            pose.pose.pose.position.y = float(depth[int(center_y)][int(center_x)][0])
+            pose.pose.pose.position.x = center_y
+            pose.pose.pose.position.z = float(depth[int(center_y)][int(center_x)][0]) / 1000
             positions.append(pose)
             self.draw(int(coords[0]), int(coords[1]), int(coords[2]), int(coords[3]), class_name)
 
         return positions
 
+
+    def detect(self, image) -> MarkerArray:
+        cv_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        results = self.model(cv_image)  # predict on an image
+        # positions = []
+        positions = MarkerArray()
+        self.image = cv_image
+
+        for box in results[0].boxes:
+            if not box:
+                break
+
+            conf = float(box.conf[0].item())
+            if conf < self.probability_threshold:
+                break
+            
+            item_class = int(box.cls[0].item())
+            class_name = results[0].names[item_class]
+            pose = self.create_pose()
+            pose.header.frame_id = class_name
+            pose.ns = class_name
+            coords = [item.item() for item in box.xyxy[0]]
+            # środek bounding box'a
+            center_x = (coords[2] - coords[0]) / 2 + coords[0]
+            center_y = (coords[3] - coords[1]) / 2 + coords[1]
+            pose.pose.position.x = center_x
+            pose.pose.position.y = center_y
+            positions.markers.append(pose)
+            self.draw(int(coords[0]), int(coords[1]), int(coords[2]), int(coords[3]), class_name)
+
+        return positions
 
     def draw(self, x1, y1, x2, y2, label):
         cv2.rectangle(self.image, (x1, y1), (x2, y2), (0, 255, 0), 2)

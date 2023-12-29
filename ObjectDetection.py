@@ -1,8 +1,10 @@
 import rospy
+import cv2
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge, CvBridgeError
 from detection import Detection
 from geometry_msgs.msg import PoseWithCovarianceStamped
+from visualization_msgs.msg import MarkerArray, Marker
 from typing import List
 
 VIDEO_TOPIC='/camera/image_raw'
@@ -16,10 +18,10 @@ class Subscriber:
         rospy.init_node('video_subscriber', anonymous=True)
         self.bridge = CvBridge()
         self.detector = Detection()
-        self.publisher = rospy.Publisher(COORDS_TOPIC, PoseWithCovarianceStamped, queue_size=10)
+        self.publisher = rospy.Publisher(COORDS_TOPIC, MarkerArray, queue_size=20)
         self.image_publisher = rospy.Publisher(IMAGE_TOPIC, Image, queue_size=10)
         self.image_sub = rospy.Subscriber(VIDEO_TOPIC, Image, self.image_callback)
-        self.depth_sub = rospy.Subscriber(DEPTH_TOPIC, Image, self.depth_callback)
+        # self.depth_sub = rospy.Subscriber(DEPTH_TOPIC, Image, self.depth_callback)
         self.image = None
         self.depth = None
 
@@ -31,7 +33,7 @@ class Subscriber:
             print(e)
             return
         self.process_data()
-    
+    """
     def depth_callback(self, msg):
         try:
             if self.depth is None:
@@ -39,21 +41,25 @@ class Subscriber:
         except CvBridgeError as e:
             print(e)
             return
-
         self.process_data()
-
+    """
     def process_data(self):
-        if self.image is None or self.depth is  None:
+        if self.image is None:
             return
         
-        data: List[PoseWithCovarianceStamped] = self.detector.detect(self.image, self.depth)
+        # data: List[PoseWithCovarianceStamped] = self.detector.detect(self.image, self.depth)
+        data: MarkerArray = self.detector.detect(self.image)
+
         img = self.detector.get_image()
         self.image = None
         self.depth = None
+
+        # cv2.imshow("img", img);
+        # cv2.waitKey(1)
+
         img = self.bridge.cv2_to_imgmsg(img, encoding="rgb8")
         self.image_publisher.publish(img)
-        for pose in data:
-            self.publisher.publish(pose)
+        self.publisher.publish(data)
 
 
 def main():
