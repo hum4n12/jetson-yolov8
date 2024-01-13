@@ -4,7 +4,8 @@ import rospy
 from geometry_msgs.msg import PoseWithCovarianceStamped
 from visualization_msgs.msg import Marker, MarkerArray
 from typing import List
-
+from pprint import pprint
+from statistics import median
 class Detection:
     def __init__(self) -> None:
         self.model = YOLO("yolov8m.pt") # pretrained on COCO dataset
@@ -48,15 +49,32 @@ class Detection:
             coords = [item.item() for item in box.xyxy[0]]
             center_x = (coords[2] - coords[0]) / 2 + coords[0]
             center_y = (coords[3] - coords[1]) / 2 + coords[1]
-            pose.pose.pose.position.x = center_x
-            pose.pose.pose.position.x = center_y
-            pose.pose.pose.position.z = float(depth[int(center_y)][int(center_x)][0]) / 1000
+            pose.pose.position.x = center_x 
+            pose.pose.position.x = center_y
+            print(f"{class_name}")
+            # pprint(depth[int(center_y-1)])
+            sqr = []
+            for j in range(10):
+                for i in range(10):
+                    if center_y+i-5< 720 and center_x+i-5 < 1280:
+                        # print(float(depth[int(center_y+j-5)][int(center_x+i-5)]))
+                        if float(depth[int((center_y+j-5))][int((center_x+i-5))]) != 0:
+                            # pose.pose.position.z = float(depth[int(center_y+j-2)][int(center_x+i-2)])
+                            sqr.append(float(depth[int(center_y+j-5)][int(center_x+i-5)]))
+                #             break
+                # if pose.pose.position.z != 0:
+                #     break
+            if len(sqr) != 0:
+                pose.pose.position.z = median(sqr)
+            else:
+                pose.pose.position.z = 0 
+            print(f"Position: X: {center_x} , Y: {center_y}, Z: {pose.pose.position.z}")
             positions.append(pose)
             self.draw(int(coords[0]), int(coords[1]), int(coords[2]), int(coords[3]), class_name)
 
         return positions
 
-
+    """
     def detect(self, image) -> MarkerArray:
         cv_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         results = self.model(cv_image)  # predict on an image
@@ -87,7 +105,7 @@ class Detection:
             self.draw(int(coords[0]), int(coords[1]), int(coords[2]), int(coords[3]), class_name)
 
         return positions
-
+    """
     def draw(self, x1, y1, x2, y2, label):
         cv2.rectangle(self.image, (x1, y1), (x2, y2), (0, 255, 0), 2)
         font = cv2.FONT_HERSHEY_SIMPLEX

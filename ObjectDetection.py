@@ -21,7 +21,7 @@ class Subscriber:
         self.publisher = rospy.Publisher(COORDS_TOPIC, MarkerArray, queue_size=20)
         self.image_publisher = rospy.Publisher(IMAGE_TOPIC, Image, queue_size=10)
         self.image_sub = rospy.Subscriber(VIDEO_TOPIC, Image, self.image_callback)
-        # self.depth_sub = rospy.Subscriber(DEPTH_TOPIC, Image, self.depth_callback)
+        self.depth_sub = rospy.Subscriber(DEPTH_TOPIC, Image, self.depth_callback)
         self.image = None
         self.depth = None
 
@@ -33,22 +33,25 @@ class Subscriber:
             print(e)
             return
         self.process_data()
-    """
+    
     def depth_callback(self, msg):
         try:
             if self.depth is None:
-                self.depth = self.bridge.imgmsg_to_cv2(msg, "bgr8")
+                self.depth = self.bridge.imgmsg_to_cv2(msg, "16UC1")
+                # cv2.normalize(self.depth,self.depth,0,255,cv2.NORM_MINMAX)
+                #min is 35cm
+                #max is 12m = 1200cm
         except CvBridgeError as e:
             print(e)
             return
         self.process_data()
-    """
+    
     def process_data(self):
         if self.image is None:
             return
-        
-        # data: List[PoseWithCovarianceStamped] = self.detector.detect(self.image, self.depth)
-        data: MarkerArray = self.detector.detect(self.image)
+        # print(f"Depth: {self.depth} size: {len(self.depth)} size2: {len(self.depth[0])}")
+        data: List[PoseWithCovarianceStamped] = self.detector.detect(self.image, self.depth)
+        #data: MarkerArray = self.detector.detect(self.image)
 
         img = self.detector.get_image()
         self.image = None

@@ -8,6 +8,7 @@ charset-normalizer==3.3.2
 contourpy==1.1.1
 cv-bridge==1.16.2
 cycler==0.12.1
+depthai==2.24.0.0
 diagnostic-analysis==1.11.0
 diagnostic-common-diagnostics==1.11.0
 diagnostic-updater==1.11.0
