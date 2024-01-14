@@ -10,9 +10,13 @@ class Detection:
         self.model_full = YOLO("yolov8m.pt")
         self.probability_threshold = 0.6
         self.image = None
+        self.image_coords = []
 
     def get_image(self):
         return self.image
+    
+    def get_image_coords(self):
+        return self.image_coords
 
     def create_pose(self) -> PoseWithCovarianceStamped:
         initpose = PoseWithCovarianceStamped()
@@ -29,6 +33,7 @@ class Detection:
         print(classes)
         results = self.model_full(cv_image) if len(classes) == 0 else self.model(cv_image, classes=classes)
         positions = []
+        self.image_coords = []
         self.image = cv_image
         for box in results[0].boxes:
             if not box:
@@ -39,7 +44,9 @@ class Detection:
                 break
             
             item_class = int(box.cls[0].item())
+            print("item_class: ", item_class)
             class_name = results[0].names[item_class]
+            print("class_names: ", class_name)
             pose = self.create_pose()
             pose.header.frame_id = class_name
             coords = [item.item() for item in box.xyxy[0]]
@@ -48,6 +55,10 @@ class Detection:
             pose.pose.pose.position.x = center_x
             pose.pose.pose.position.y = center_y
             positions.append(pose)
+            self.image_coords.append({
+                "label": class_name,
+                "box": coords
+            })
             
         self.image = results[0].plot()
 
