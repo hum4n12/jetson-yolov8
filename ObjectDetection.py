@@ -1,11 +1,14 @@
 import rospy
 import cv2
+from ultralytics.utils.plotting import Annotator
+from std_msgs.msg import String
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge, CvBridgeError
 from detection import Detection
 from geometry_msgs.msg import PoseWithCovarianceStamped
 from visualization_msgs.msg import MarkerArray, Marker
 from typing import List
+import json
 
 VIDEO_TOPIC='/camera/image_raw'
 DEPTH_TOPIC='/camera/depth_raw'
@@ -21,9 +24,11 @@ class Subscriber:
         self.publisher = rospy.Publisher(COORDS_TOPIC, MarkerArray, queue_size=20)
         self.image_publisher = rospy.Publisher(IMAGE_TOPIC, Image, queue_size=10)
         self.image_sub = rospy.Subscriber(VIDEO_TOPIC, Image, self.image_callback)
-        self.depth_sub = rospy.Subscriber(DEPTH_TOPIC, Image, self.depth_callback)
+        self.item_sub = rospy.Subscriber(ITEM_TOPIC, String, self.items_callback)
         self.image = None
         self.depth = None
+        self.items = []
+        self.counter = 0
 
     def image_callback(self, msg):
         try:
@@ -47,23 +52,30 @@ class Subscriber:
         self.process_data()
     
     def process_data(self):
-        if self.image is None:
+        if self.image is None or self.depth is None:
             return
-        # print(f"Depth: {self.depth} size: {len(self.depth)} size2: {len(self.depth[0])}")
-        data: List[PoseWithCovarianceStamped] = self.detector.detect(self.image, self.depth)
-        #data: MarkerArray = self.detector.detect(self.image)
-
-        img = self.detector.get_image()
-        self.image = None
-        self.depth = None
-
-        # cv2.imshow("img", img);
-        # cv2.waitKey(1)
+        
+        if self.counter == 0:
+            data: List[PoseWithCovarianceStamped] = self.detector.detect(self.image, self.depth, self.items)
+            self.publisher.publish(data)
+        
+        self.counter += 1
+        img = cv2.cvtColor(self.image, cv2.COLOR_BGR2RGB)
+        annotator = Annotator(img)
+        for coord in self.detector.get_detected_objects():
+            annotator.box_label(box = coord["box"], label = coord["label"])
 
         img = self.bridge.cv2_to_imgmsg(img, encoding="rgb8")
         self.image_publisher.publish(img)
-        self.publisher.publish(data)
 
+        if self.counter >= 10:
+            self.counter = 0
+        
+        self.image = None
+        self.depth = None
+
+    def items_callback(self, items):
+        self.items = json.loads(items.data)
 
 def main():
     subscriber = Subscriber()
