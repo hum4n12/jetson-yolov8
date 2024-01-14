@@ -1,5 +1,4 @@
 import rospy
-import cv2
 from ultralytics.utils.plotting import Annotator
 from std_msgs.msg import String
 from sensor_msgs.msg import Image
@@ -9,6 +8,7 @@ from geometry_msgs.msg import PoseWithCovarianceStamped
 from visualization_msgs.msg import MarkerArray, Marker
 from typing import List
 import json
+import cv2
 
 VIDEO_TOPIC='/camera/image_raw'
 DEPTH_TOPIC='/camera/depth_raw'
@@ -25,20 +25,31 @@ class Subscriber:
         self.image_publisher = rospy.Publisher(IMAGE_TOPIC, Image, queue_size=10)
         self.image_sub = rospy.Subscriber(VIDEO_TOPIC, Image, self.image_callback)
         self.item_sub = rospy.Subscriber(ITEM_TOPIC, String, self.items_callback)
+        self.depth_sub = rospy.Subscriber(DEPTH_TOPIC, Image, self.depth_callback)
         self.image = None
-        self.depth = None
+        self.depth = 1
         self.items = []
         self.counter = 0
 
     def image_callback(self, msg):
         try:
+            img = self.bridge.imgmsg_to_cv2(msg, "bgr8")
             if self.image is None:
-                self.image = self.bridge.imgmsg_to_cv2(msg, "bgr8")
+                self.image = img
+            
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            annotator = Annotator(img)
+            for coord in self.detector.get_detected_objects():
+                annotator.box_label(box = coord["box"], label = coord["label"])
+
+            img = self.bridge.cv2_to_imgmsg(img, encoding="rgb8")
+            self.image_publisher.publish(img)
+
         except CvBridgeError as e:
             print(e)
             return
         self.process_data()
-    
+        
     def depth_callback(self, msg):
         try:
             if self.depth is None:
@@ -50,32 +61,25 @@ class Subscriber:
             print(e)
             return
         self.process_data()
-    
+
     def process_data(self):
-        if self.image is None or self.depth is None:
+        if self.image is None:
             return
-        
+
         if self.counter == 0:
             data: List[PoseWithCovarianceStamped] = self.detector.detect(self.image, self.depth, self.items)
             self.publisher.publish(data)
-        
+
         self.counter += 1
-        img = cv2.cvtColor(self.image, cv2.COLOR_BGR2RGB)
-        annotator = Annotator(img)
-        for coord in self.detector.get_detected_objects():
-            annotator.box_label(box = coord["box"], label = coord["label"])
-
-        img = self.bridge.cv2_to_imgmsg(img, encoding="rgb8")
-        self.image_publisher.publish(img)
-
-        if self.counter >= 10:
+        if self.counter >= 20:
             self.counter = 0
-        
         self.image = None
         self.depth = None
 
     def items_callback(self, items):
         self.items = json.loads(items.data)
+
+
 
 def main():
     subscriber = Subscriber()

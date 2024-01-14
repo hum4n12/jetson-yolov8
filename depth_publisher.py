@@ -3,7 +3,7 @@ from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 import cv2
 
-VIDEO_PATH = '../Downloads/zielu/v2/depth.mp4'
+VIDEO_PATH = 'depth.mp4'
 
 class DepthPublisher:
     def __init__(self, topic_name):
@@ -11,8 +11,8 @@ class DepthPublisher:
         self.bridge = CvBridge()
         self.image_pub = rospy.Publisher(topic_name, Image, queue_size=10)
 
-        self.video_capture = cv2.VideoCapture(VIDEO_PATH)
-        # self.video_capture.set(cv2.CAP_PROP_FORMAT, cv2.CV_16F)
+        self.video_capture = cv2.VideoCapture(VIDEO_PATH, cv2.CAP_OPENNI_DEPTH_MAP)
+        self.video_capture.set(cv2.CAP_PROP_FORMAT, cv2.CV_16F)
 
     def publish_frames(self):
         rate = rospy.Rate(30) 
@@ -25,7 +25,7 @@ class DepthPublisher:
                 continue
 
             if ret:
-                ros_image = self.bridge.cv2_to_imgmsg(frame, "bgr8")
+                ros_image = self.bridge.cv2_to_imgmsg(frame, "16UC1")
                 self.image_pub.publish(ros_image)
             rate.sleep()
 
