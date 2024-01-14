@@ -7,6 +7,7 @@ from typing import List
 class Detection:
     def __init__(self) -> None:
         self.model = YOLO("yolov8m.pt") #pretrained on COCO dataset
+        self.model_full = YOLO("yolov8m.pt")
         self.probability_threshold = 0.6
         self.image = None
 
@@ -23,16 +24,16 @@ class Detection:
         initpose.pose.pose.orientation.z = 0.0
         return initpose
 
-    def detect(self, image, depth) -> List[PoseWithCovarianceStamped]:
+    def detect(self, image, classes = []) -> List[PoseWithCovarianceStamped]:
         cv_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        results = self.model(cv_image)  # predict on an image
+        print(classes)
+        results = self.model_full(cv_image) if len(classes) == 0 else self.model(cv_image, classes=classes)
         positions = []
         self.image = cv_image
-
         for box in results[0].boxes:
             if not box:
                 break
-
+            
             conf = float(box.conf[0].item())
             if conf < self.probability_threshold:
                 break
@@ -45,18 +46,9 @@ class Detection:
             center_x = (coords[2] - coords[0]) / 2 + coords[0]
             center_y = (coords[3] - coords[1]) / 2 + coords[1]
             pose.pose.pose.position.x = center_x
-            pose.pose.pose.position.y = float(depth[int(center_y)][int(center_x)][0])
+            pose.pose.pose.position.y = center_y
             positions.append(pose)
-            self.draw(int(coords[0]), int(coords[1]), int(coords[2]), int(coords[3]), class_name)
+            
+        self.image = results[0].plot()
 
         return positions
-
-
-    def draw(self, x1, y1, x2, y2, label):
-        cv2.rectangle(self.image, (x1, y1), (x2, y2), (0, 255, 0), 2)
-        font = cv2.FONT_HERSHEY_SIMPLEX
-        font_scale = 0.5
-        font_thickness = 1
-        text_size = cv2.getTextSize(label, font, font_scale, font_thickness)[0]
-        text_position = ((x1 + x2 - text_size[0]) // 2, y1 - 10)
-        cv2.putText(self.image, label, text_position, font, font_scale, (0, 0, 255), font_thickness, cv2.LINE_AA)
